@@ -1,84 +1,98 @@
-@description('VM admin username')
-param adminUsername string
+param location string = 'westeurope'
+param adminUsername string = 'azureuser'
+@secure()
+param adminPassword string
 
-@description('SSH public key')
-param sshPublicKey string
+var vmName = 'testvm'
+var vnetName = 'testvnet'
+var subnetName = 'testsubnet'
+var ipName = 'testip'
+var nicName = 'testnic'
 
-@description('VM name')
-param vmName string = 'testvm'
+resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' = {
+  name: vnetName
+  location: location
+  properties: {
+    addressSpace: {
+      addressPrefixes: [
+        '10.0.0.0/16'
+      ]
+    }
+    subnets: [
+      {
+        name: subnetName
+        properties: {
+          addressPrefix: '10.0.0.0/24'
+        }
+      }
+    ]
+  }
+}
+
+resource publicIp 'Microsoft.Network/publicIPAddresses@2023-09-01' = {
+  name: ipName
+  location: location
+  properties: {
+    publicIPAllocationMethod: 'Dynamic'
+  }
+}
+
+resource nic 'Microsoft.Network/networkInterfaces@2023-09-01' = {
+  name: nicName
+  location: location
+  properties: {
+    ipConfigurations: [
+      {
+        name: 'ipconfig1'
+        properties: {
+          subnet: {
+            id: vnet.properties.subnets[0].id
+          }
+          privateIPAllocationMethod: 'Dynamic'
+          publicIPAddress: {
+            id: publicIp.id
+          }
+        }
+      }
+    ]
+  }
+}
 
 resource vm 'Microsoft.Compute/virtualMachines@2023-03-01' = {
   name: vmName
-  location: 'WestEurope'
+  location: location
   properties: {
     hardwareProfile: {
-      vmSize: 'Standard_B1ls'  // Cheapest VM ($4-5/month)
+      vmSize: 'Standard_B1ls'
+    }
+    osProfile: {
+      computerName: vmName
+      adminUsername: adminUsername
+      adminPassword: adminPassword
+      linuxConfiguration: {
+        disablePasswordAuthentication: false
+      }
     }
     storageProfile: {
       imageReference: {
         publisher: 'Canonical'
         offer: 'UbuntuServer'
-        sku: '18.04-LTS'
+        sku: '18_04-lts-gen2'
         version: 'latest'
       }
       osDisk: {
         createOption: 'FromImage'
-        diskSizeGB: 30
-      }
-    }
-    osProfile: {
-      computerName: vmName
-      adminUsername: adminUsername
-      linuxConfiguration: {
-        disablePasswordAuthentication: true
-        ssh: {
-          publicKeys: [{
-            path: '/home/${adminUsername}/.ssh/authorized_keys'
-            keyData: sshPublicKey
-          }]
+        managedDisk: {
+          storageAccountType: 'Standard_LRS'
         }
       }
     }
     networkProfile: {
-      networkInterfaces: [{
-        id: nic.id
-      }]
+      networkInterfaces: [
+        {
+          id: nic.id
+        }
+      ]
     }
   }
 }
-
-resource nic 'Microsoft.Network/networkInterfaces@2023-03-01' = {
-  name: '${vmName}-nic'
-  location: 'WestEurope'
-  properties: {
-    ipConfigurations: [{
-      name: 'ipconfig1'
-      properties: {
-        privateIPAllocationMethod: 'Dynamic'
-        publicIPAddress: {
-          id: publicIp.id
-        }
-        subnet: {
-          id: vnet::subnet.id
-        }
-      }
-    }]
-  }
-}
-
-resource publicIp 'Microsoft.Network/publicIPAddresses@2023-03-01' = {
-  name: '${vmName}-ip'
-  location: 'WestEurope'
-  properties: {
-    publicIPAllocationMethod: 'Dynamic'
-    idleTimeoutInMinutes: 4
-  }
-  sku: {
-    name: 'Basic'
-  }
-}
-
-resource vnet 'Microsoft.Network/virtualNetworks@2023-03-01' existing = {
-  name: 'default-vnet'
-}
-

@@ -8,37 +8,21 @@ variables:
   paramFile: './infra/main.bicepparam'
 
 pool:
-  vmImage: 'ubuntu-latest'
-  demands:  # Workaround added here
-  - agent.name -equals $(agent.name)
+  name: Default  # Use your self-hosted agent pool
 
-stages:
-- stage: ValidateAndDeploy
-  displayName: Validate & Deploy
-  jobs:
-  - job: FullProcess
-    steps:
-    - task: AzureCLI@2
-      displayName: Validate Template
-      inputs:
-        azureSubscription: 'azure-connection'
-        scriptType: bash
-        script: |
-          az bicep build --file $(bicepFile)
-          az deployment group validate \
-            --resource-group $(resourceGroupName) \
-            --template-file $(bicepFile) \
-            --parameters @$(paramFile)
-    
-    - task: AzureCLI@2
-      displayName: Deploy Resources
-      inputs:
-        azureSubscription: 'azure-connection'
-        scriptType: bash
-        script: |
-          az group create --name $(resourceGroupName) --location $(location)
-          az deployment group create \
-            --resource-group $(resourceGroupName) \
-            --template-file $(bicepFile) \
-            --parameters @$(paramFile) \
-            --parameters sshPublicKey="$(SSH_PUBLIC_KEY)"
+steps:
+- checkout: self
+
+- task: AzureCLI@2
+  displayName: 'Deploy Bicep Template'
+  inputs:
+    azureSubscription: 'azure-connection'
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      az --version
+      az group create --name $(resourceGroupName) --location $(location)
+      az deployment group create \
+        --resource-group $(resourceGroupName) \
+        --template-file $(bicepFile) \
+        --parameters @$(paramFile)

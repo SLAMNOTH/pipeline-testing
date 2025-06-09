@@ -4,25 +4,26 @@ trigger:
 variables:
   resourceGroupName: 'saxion-test-rg'
   location: 'WestEurope'
-  bicepFile: './infra/main.bicep'
-  paramFile: './infra/main.bicepparam'
+  bicepFile: 'infra/main.bicep'
+  paramFile: 'infra/main.bicepparam'
 
 pool:
-  name: Default  # Use your self-hosted agent pool
+  name: Default
 
 steps:
 - checkout: self
 
 - task: AzureCLI@2
-  displayName: 'Deploy Bicep Template'
+  displayName: 'Deploy Bicep Infrastructure'
   inputs:
     azureSubscription: 'azure-connection'
-    scriptType: bash
+    scriptType: pscore  # Use PowerShell Core instead of bash
     scriptLocation: inlineScript
     inlineScript: |
       az --version
       az group create --name $(resourceGroupName) --location $(location)
-      az deployment group create \
-        --resource-group $(resourceGroupName) \
-        --template-file $(bicepFile) \
+      az deployment group create `
+        --resource-group $(resourceGroupName) `
+        --template-file $(bicepFile) `
         --parameters @$(paramFile)
+    workingDirectory: $(Build.SourcesDirectory)

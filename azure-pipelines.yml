@@ -1,0 +1,46 @@
+trigger:
+- main
+
+variables:
+  resourceGroupName: 'saxion-test-rg'
+  location: 'WestEurope'
+  bicepFile: './infra/main.bicep'
+  paramFile: './infra/main.bicepparam'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+- stage: Validate
+  displayName: Validate Template
+  jobs:
+  - job: Validate
+    steps:
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: 'azure-connection'
+        scriptType: bash
+        script: |
+          az bicep build --file $(bicepFile)
+          az deployment group validate \
+            --resource-group $(resourceGroupName) \
+            --template-file $(bicepFile) \
+            --parameters @$(paramFile)
+
+- stage: Deploy
+  displayName: Deploy Infrastructure
+  dependsOn: Validate
+  jobs:
+  - job: Deploy
+    steps:
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: 'azure-connection'
+        scriptType: bash
+        script: |
+          az group create --name $(resourceGroupName) --location $(location)
+          az deployment group create \
+            --resource-group $(resourceGroupName) \
+            --template-file $(bicepFile) \
+            --parameters @$(paramFile) \
+            --parameters sshPublicKey="$(SSH_PUBLIC_KEY)"

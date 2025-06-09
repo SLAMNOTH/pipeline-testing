@@ -9,14 +9,17 @@ variables:
 
 pool:
   vmImage: 'ubuntu-latest'
+  demands:  # Workaround added here
+  - agent.name -equals $(agent.name)
 
 stages:
-- stage: Validate
-  displayName: Validate Template
+- stage: ValidateAndDeploy
+  displayName: Validate & Deploy
   jobs:
-  - job: Validate
+  - job: FullProcess
     steps:
     - task: AzureCLI@2
+      displayName: Validate Template
       inputs:
         azureSubscription: 'azure-connection'
         scriptType: bash
@@ -26,14 +29,9 @@ stages:
             --resource-group $(resourceGroupName) \
             --template-file $(bicepFile) \
             --parameters @$(paramFile)
-
-- stage: Deploy
-  displayName: Deploy Infrastructure
-  dependsOn: Validate
-  jobs:
-  - job: Deploy
-    steps:
+    
     - task: AzureCLI@2
+      displayName: Deploy Resources
       inputs:
         azureSubscription: 'azure-connection'
         scriptType: bash

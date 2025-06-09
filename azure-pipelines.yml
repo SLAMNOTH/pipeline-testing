@@ -25,6 +25,8 @@ steps:
       az deployment group create `
         --resource-group $(resourceGroupName) `
         --template-file $(bicepFile) `
-        --parameters @$(paramFile) `
-        --parameters adminPassword="$(VM_ADMIN_PASSWORD)"
+        --parameters "@$(paramFile)" `
+        --parameters "adminPassword=$(VM_ADMIN_PASSWORD)" `
+        --parameters "adminUsername=azureuser" `
+        --parameters "location=$(location)"
     workingDirectory: $(Build.SourcesDirectory)

@@ -4,8 +4,8 @@ trigger:
 variables:
   resourceGroupName: 'saxion-test-rg'
   location: 'WestEurope'
-  bicepFile: 'infra/main.bicep'
-  paramFile: 'infra/main.bicepparam'
+  bicepFile: './infra/main.bicep'
+  paramFile: './infra/main.parameters.json'
 
 pool:
   name: Default
@@ -17,7 +17,7 @@ steps:
   displayName: 'Deploy Bicep Infrastructure'
   inputs:
     azureSubscription: 'azure-connection'
-    scriptType: pscore  # Use PowerShell Core instead of bash
+    scriptType: pscore
     scriptLocation: inlineScript
     inlineScript: |
       az --version
@@ -25,5 +25,6 @@ steps:
       az deployment group create `
         --resource-group $(resourceGroupName) `
         --template-file $(bicepFile) `
-        --parameters @$(paramFile)
+        --parameters @$(paramFile) `
+        --parameters adminPassword="$(VM_ADMIN_PASSWORD)"
     workingDirectory: $(Build.SourcesDirectory)

@@ -2,7 +2,7 @@ trigger:
 - main
 
 variables:
-  resourceGroupName: 'saxion-test-rg'
+  resourceGroupName: 'juict-test'
   location: 'WestEurope'
   bicepFile: './infra/main.bicep'
   paramFile: './infra/main.parameters.json'

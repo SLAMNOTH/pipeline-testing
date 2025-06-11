@@ -1,5 +1,5 @@
 trigger:
-- main
+- none
 
 variables:
   location: 'WestEurope'

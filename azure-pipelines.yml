@@ -6,7 +6,8 @@ variables:
   bicepFile: './infra/windows-vm.bicep'
 
 pool:
-  name: Default  # Your self-hosted Windows agent pool
+  vmImage: 'windows-latest'
+
 
 steps:
 - checkout: self

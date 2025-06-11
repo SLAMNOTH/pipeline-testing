@@ -3,35 +3,12 @@ param adminUsername string = 'azureuser'
 @secure()
 param adminPassword string
 
-var vmName = 'winvm'
-var vnetName = 'win-vnet'
-var subnetName = 'win-subnet'
-var ipName = 'win-ip'
-var nicName = 'win-nic'
-var nsgName = 'win-nsg'
-
-resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' = {
-  name: vnetName
-  location: location
-  properties: {
-    addressSpace: {
-      addressPrefixes: [
-        '10.0.0.0/16'
-      ]
-    }
-    subnets: [
-      {
-        name: subnetName
-        properties: {
-          addressPrefix: '10.0.0.0/24'
-          networkSecurityGroup: {
-            id: nsg.id
-          }
-        }
-      }
-    ]
-  }
-}
+var vmName = 'win10vm'
+var vnetName = 'win10-vnet'
+var subnetName = 'win10-subnet'
+var ipName = 'win10-ip'
+var nicName = 'win10-nic'
+var nsgName = 'win10-nsg'
 
 resource nsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
   name: nsgName
@@ -49,6 +26,27 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
           destinationPortRange: '3389'
           sourceAddressPrefix: '*'
           destinationAddressPrefix: '*'
+        }
+      }
+    ]
+  }
+}
+
+resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' = {
+  name: vnetName
+  location: location
+  properties: {
+    addressSpace: {
+      addressPrefixes: ['10.0.0.0/16']
+    }
+    subnets: [
+      {
+        name: subnetName
+        properties: {
+          addressPrefix: '10.0.0.0/24'
+          networkSecurityGroup: {
+            id: nsg.id
+          }
         }
       }
     ]
@@ -89,7 +87,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2023-03-01' = {
   location: location
   properties: {
     hardwareProfile: {
-      vmSize: 'Standard_B1ls'
+      vmSize: 'Standard_B1ls' // Cheapest general-purpose size (~$10/month)
     }
     osProfile: {
       computerName: vmName
@@ -101,24 +99,22 @@ resource vm 'Microsoft.Compute/virtualMachines@2023-03-01' = {
     }
     storageProfile: {
       imageReference: {
-        publisher: 'MicrosoftWindowsServer'
-        offer: 'WindowsServer'
-        sku: '2022-Datacenter'
+        publisher: 'MicrosoftWindowsDesktop'
+        offer: 'Windows-10'
+        sku: '20h2-pro' // Windows 10 Pro, version 20H2
         version: 'latest'
       }
       osDisk: {
         createOption: 'FromImage'
         managedDisk: {
-          storageAccountType: 'Standard_LRS'
+          storageAccountType: 'StandardSSD_LRS'
         }
       }
     }
     networkProfile: {
-      networkInterfaces: [
-        {
-          id: nic.id
-        }
-      ]
+      networkInterfaces: [{
+        id: nic.id
+      }]
     }
   }
 }

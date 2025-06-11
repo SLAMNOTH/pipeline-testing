@@ -1,48 +1,36 @@
 trigger:
 - none
 
-variables:
-  location: 'WestEurope'
-  bicepFile: './infra/windows-vm.bicep'
-
 pool:
   vmImage: 'windows-latest'
 
+variables:
+  vmName: 'myWinVM'
+  resourceGroup: 'winvm-rg'
+  location: 'West Europe'
 
 steps:
 - checkout: self
 
 - task: AzureCLI@2
-  displayName: 'Deploy Windows VM Infrastructure'
+  displayName: 'Install Bicep'
   inputs:
     azureSubscription: 'azure-connection'
-    scriptType: pscore
-    scriptLocation: inlineScript
+    scriptType: 'ps'
+    scriptLocation: 'inlineScript'
     inlineScript: |
-      Write-Host "Azure CLI Version:"
-      az --version
-      
-      Write-Host "Creating resource group if needed..."
-      az group create --name $(resourceGroupName) --location $(location)
-      
-      Write-Host "Deploying Windows VM infrastructure..."
-      $deploymentName = "windows-vm-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-      
-      az deployment group create `
-        --resource-group $(resourceGroupName) `
-        --template-file $(bicepFile) `
-        --parameters "adminUsername=azureuser" `
-        --parameters "adminPassword=$(VM_ADMIN_PASSWORD)" `
-        --parameters "location=$(location)" `
-        --name $deploymentName `
-        --verbose
-      
-      Write-Host "Deployment completed successfully!"
-      
-      Write-Host "Getting VM public IP..."
-      az deployment group show `
-        --resource-group $(resourceGroupName) `
-        --name $deploymentName `
-        --query "properties.outputs.publicIpAddress.value" `
-        --output tsv
-    workingDirectory: $(Build.SourcesDirectory)
+      az bicep install
+
+- task: AzureResourceManagerTemplateDeployment@3
+  displayName: 'Deploy Bicep Template'
+  inputs:
+    deploymentScope: 'Resource Group'
+    azureResourceManagerConnection: 'azure-connection'
+    subscriptionId: '$(subscriptionId)'
+    action: 'Create Or Update Resource Group'
+    resourceGroupName: '$(resourceGroup)'
+    location: '$(location)'
+    templateLocation: 'Linked artifact'
+    csmFile: 'vm-deploy.bicep'
+    csmParametersFile: 'vm-params.bicepparam'
+    deploymentMode: 'Incremental'

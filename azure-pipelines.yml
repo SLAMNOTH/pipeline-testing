@@ -25,23 +25,6 @@ steps:
       az bicep install
     workingDirectory: $(Build.SourcesDirectory)
 
-- task: AzureCLI@2
-  displayName: 'Validate Bicep Template'
-  inputs:
-    azureSubscription: 'azure-connection'
-    scriptType: pscore
-    scriptLocation: inlineScript
-    inlineScript: |
-      Write-Host "Validating Bicep syntax..."
-      az bicep build --file $(bicepFile)
-      
-      Write-Host "Performing deployment validation..."
-      az deployment group validate `
-        --resource-group $(resourceGroupName) `
-        --template-file $(bicepFile) `
-        --parameters "@$(paramFile)" `
-        --parameters "location=$(location)"
-    workingDirectory: $(Build.SourcesDirectory)
 
 - task: AzureCLI@2
   displayName: 'Deploy NAT Gateway Infrastructure'

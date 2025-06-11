@@ -2,31 +2,57 @@ trigger:
 - main
 
 variables:
-  resourceGroupName: 'juict-test'
+  resourceGroupName: 'saxion-test-rg'
   location: 'WestEurope'
   bicepFile: './infra/main.bicep'
   paramFile: './infra/main.parameters.json'
+  vmName: 'testvm'
 
 pool:
   name: Default
 
-steps:
-- checkout: self
+stages:
+- stage: Deploy
+  displayName: Deploy Infrastructure
+  jobs:
+  - job: DeployJob
+    steps:
+    - checkout: self
+    - task: AzureCLI@2
+      displayName: 'Deploy Bicep Infrastructure'
+      inputs:
+        azureSubscription: 'azure-connection'
+        scriptType: pscore
+        scriptLocation: inlineScript
+        inlineScript: |
+          az group create --name $(resourceGroupName) --location $(location)
+          az deployment group create `
+            --resource-group $(resourceGroupName) `
+            --template-file $(bicepFile) `
+            --parameters "@$(paramFile)" `
+            --parameters "adminPassword=$(VM_ADMIN_PASSWORD)" `
+            --parameters "adminUsername=azureuser" `
+            --parameters "location=$(location)"
+      env:
+        VM_ADMIN_PASSWORD: $(VM_ADMIN_PASSWORD)
 
-- task: AzureCLI@2
-  displayName: 'Deploy Bicep Infrastructure'
-  inputs:
-    azureSubscription: 'azure-connection'
-    scriptType: pscore
-    scriptLocation: inlineScript
-    inlineScript: |
-      az --version
-      az group create --name $(resourceGroupName) --location $(location)
-      az deployment group create `
-        --resource-group $(resourceGroupName) `
-        --template-file $(bicepFile) `
-        --parameters "@$(paramFile)" `
-        --parameters "adminPassword=$(VM_ADMIN_PASSWORD)" `
-        --parameters "adminUsername=azureuser" `
-        --parameters "location=$(location)"
-    workingDirectory: $(Build.SourcesDirectory)
+- stage: Test
+  displayName: Test Deployment
+  dependsOn: Deploy
+  jobs:
+  - job: TestJob
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Verify VM is Running'
+      inputs:
+        azureSubscription: 'azure-connection'
+        scriptType: pscore
+        scriptLocation: inlineScript
+        inlineScript: |
+          $vm = az vm get-instance-view --resource-group $(resourceGroupName) --name $(vmName) --query "instanceView.statuses[?starts_with(code, 'PowerState/')].displayStatus" -o tsv
+          if ($vm -ne "VM running") {
+            Write-Error "VM is not running! Status: $vm"
+            exit 1
+          } else {
+            Write-Host "VM is running and accessible."
+          }

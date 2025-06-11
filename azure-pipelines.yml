@@ -2,119 +2,29 @@ trigger:
 - none
 
 variables:
-  resourceGroupName: 'winvm-$(Build.BuildId)'
+  resourceGroupName: 'winvm-rg'
   location: 'westeurope'
   templateFile: './main.bicep'
-  adminUN: 'azureuser'
-  # Set VM_ADMIN_PASSWORD as secret pipeline variable
+  adminUN: 'azureuser' # Or use a pipeline variable
+  # adminPASS should be set as a secret pipeline variable
 
-stages:
-## Stage 1: Build & Validate
-- stage: Build
-  displayName: 'Build & Validate'
-  jobs:
-  - job: BicepBuild
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - checkout: self
-    
-    - task: AzureCLI@2
-      displayName: 'Bicep Build & Validate'
-      inputs:
-        azureSubscription: 'azure-connection'
-        scriptType: bash  # Required for Linux agents
-        scriptLocation: inlineScript  # Must be explicitly set
-        inlineScript: |
-          az bicep install
-          az bicep build --file $(templateFile)
-          az deployment group validate \
-            --resource-group $(resourceGroupName) \
-            --template-file $(templateFile) \
-            --parameters adminUsername="$(adminUN)" \
-            --parameters adminPassword="$(VM_ADMIN_PASSWORD)"
-        workingDirectory: $(Build.SourcesDirectory)  # Explicit path
+pool:
+  vmImage: 'ubuntu-latest'
 
-    - task: AzureCLI@2
-      displayName: 'Validate Template'
-      inputs:
-        azureSubscription: 'azure-connection'
-        scriptType: bash
-        scriptLocation: inlineScript
-        inlineScript: |
-          az deployment group validate \
-            --resource-group $(resourceGroupName) \
-            --template-file $(templateFile) \
-            --parameters adminUsername="$(adminUN)" \
-            --parameters adminPassword="$(VM_ADMIN_PASSWORD)"
-        workingDirectory: $(Build.SourcesDirectory)
+steps:
+- checkout: self
 
-## Stage 2: Test Deployment
-- stage: Test
-  displayName: 'Test Deployment'
-  dependsOn: Build
-  jobs:
-  - job: DeployTest
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - task: AzureCLI@2
-      displayName: 'Deploy to Test'
-      inputs:
-        azureSubscription: 'azure-connection'
-        scriptType: bash
-        scriptLocation: inlineScript
-        inlineScript: |
-          az group create --name $(resourceGroupName)-test --location $(location)
-          az deployment group create \
-            --resource-group $(resourceGroupName)-test \
-            --template-file $(templateFile) \
-            --parameters adminUsername="$(adminUN)" \
-            --parameters adminPassword="$(VM_ADMIN_PASSWORD)"
-        workingDirectory: $(Build.SourcesDirectory)
-
-## Stage 3: Production Deployment
-- stage: Deploy
-  displayName: 'Production Deployment'
-  dependsOn: Test
-  jobs:
-  - job: DeployProd
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - task: AzureCLI@2
-      displayName: 'Deploy to Production'
-      inputs:
-        azureSubscription: 'azure-connection'
-        scriptType: bash
-        scriptLocation: inlineScript
-        inlineScript: |
-          az group create --name $(resourceGroupName)-prod --location $(location)
-          az deployment group create \
-            --resource-group $(resourceGroupName)-prod \
-            --template-file $(templateFile) \
-            --parameters adminUsername="$(adminUN)" \
-            --parameters adminPassword="$(VM_ADMIN_PASSWORD)"
-        workingDirectory: $(Build.SourcesDirectory)
-
-## Stage 4: Cleanup
-- stage: Cleanup
-  displayName: 'Resource Cleanup'
-  dependsOn: Deploy
-  condition: |
-    and(
-      succeeded(),
-      eq(variables['Build.Reason'], 'PullRequest')
-    )
-  jobs:
-  - job: CleanupResources
-    steps:
-    - task: AzureCLI@2
-      displayName: 'Remove Test Resources'
-      inputs:
-        azureSubscription: 'azure-connection'
-        scriptType: bash
-        scriptLocation: inlineScript
-        inlineScript: |
-          az group delete --name $(resourceGroupName)-test --yes --no-wait
-          az group delete --name $(resourceGroupName)-prod --yes --no-wait
+- task: AzureCLI@2
+  displayName: 'Deploy Windows VM with Bicep'
+  inputs:
+    azureSubscription: 'azure-connection'
+    scriptType: bash
+    scriptLocation: inlineScript
+    useGlobalConfig: false
+    inlineScript: |
+      az --version
+      az group create --name $(resourceGroupName) --location $(location)
+      az deployment group create \
+        --resource-group $(resourceGroupName) \
+        --template-file $(templateFile) \
+        --parameters adminUsername="$(adminUN)" adminPassword="$(adminPASS)"

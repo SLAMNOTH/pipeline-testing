@@ -2,31 +2,78 @@ trigger:
 - none
 
 variables:
-  resourceGroupName: 'juict-test'
   location: 'WestEurope'
-  bicepFile: './infra/main.bicep'
-  paramFile: './infra/main.parameters.json'
+  bicepFile: './infra/nat-gateway.bicep'
+  paramFile: './infra/nat-gateway.parameters.json'
 
 pool:
-  name: Default
+  name: Default  # Your self-hosted Windows agent pool
 
 steps:
 - checkout: self
 
+- task: PowerShell@2
+  displayName: 'Verify Prerequisites'
+  inputs:
+    targetType: 'inline'
+    script: |
+      Write-Host "Checking Azure CLI version..."
+      az --version
+      Write-Host "Checking Bicep version..."
+      az bicep version
+      Write-Host "Installing/Updating Bicep..."
+      az bicep install
+    workingDirectory: $(Build.SourcesDirectory)
+
 - task: AzureCLI@2
-  displayName: 'Deploy Bicep Infrastructure'
+  displayName: 'Validate Bicep Template'
   inputs:
     azureSubscription: 'azure-connection'
     scriptType: pscore
     scriptLocation: inlineScript
     inlineScript: |
-      az --version
+      Write-Host "Validating Bicep syntax..."
+      az bicep build --file $(bicepFile)
+      
+      Write-Host "Performing deployment validation..."
+      az deployment group validate `
+        --resource-group $(resourceGroupName) `
+        --template-file $(bicepFile) `
+        --parameters "@$(paramFile)" `
+        --parameters "location=$(location)"
+    workingDirectory: $(Build.SourcesDirectory)
+
+- task: AzureCLI@2
+  displayName: 'Deploy NAT Gateway Infrastructure'
+  inputs:
+    azureSubscription: 'azure-connection'
+    scriptType: pscore
+    scriptLocation: inlineScript
+    inlineScript: |
+      Write-Host "Creating resource group if it doesn't exist..."
       az group create --name $(resourceGroupName) --location $(location)
+      
+      Write-Host "Deploying NAT Gateway infrastructure..."
       az deployment group create `
         --resource-group $(resourceGroupName) `
         --template-file $(bicepFile) `
         --parameters "@$(paramFile)" `
-        --parameters "adminPassword=$(VM_ADMIN_PASSWORD)" `
-        --parameters "adminUsername=azureuser" `
-        --parameters "location=$(location)"
+        --parameters "location=$(location)" `
+        --name "nat-gateway-deployment-$(Build.BuildNumber)"
+      
+      Write-Host "Deployment completed successfully!"
+    workingDirectory: $(Build.SourcesDirectory)
+
+- task: AzureCLI@2
+  displayName: 'Output Deployment Results'
+  inputs:
+    azureSubscription: 'azure-connection'
+    scriptType: pscore
+    scriptLocation: inlineScript
+    inlineScript: |
+      Write-Host "Retrieving deployment outputs..."
+      az deployment group show `
+        --resource-group $(resourceGroupName) `
+        --name "nat-gateway-deployment-$(Build.BuildNumber)" `
+        --query "properties.outputs"
     workingDirectory: $(Build.SourcesDirectory)

@@ -1,7 +1,8 @@
-trigger: none
+trigger:
+- none
 
 variables:
-  resourceGroupName: 'saxion-test-rg'
+  resourceGroupName: 'juict-test'
   location: 'WestEurope'
   bicepFile: './infra/main.bicep'
   paramFile: './infra/main.parameters.json'
@@ -12,52 +13,20 @@ pool:
 steps:
 - checkout: self
 
-- script: |
-    echo "Current working directory:"
-    cd
-    echo "Listing contents of $(Build.SourcesDirectory):"
-    dir $(Build.SourcesDirectory)
-    echo "Listing contents of $(Build.SourcesDirectory)\infra:"
-    dir $(Build.SourcesDirectory)\infra
-  displayName: 'Show directory contents (debug)'
-
-- script: |
-    echo "Contents of main.bicep:"
-    type $(Build.SourcesDirectory)\infra\main.bicep
-    echo "Contents of main.parameters.json:"
-    type $(Build.SourcesDirectory)\infra\main.parameters.json
-  displayName: 'Show Bicep and parameter file contents (debug)'
-
 - task: AzureCLI@2
-  displayName: 'Deploy Resources'
+  displayName: 'Deploy Bicep Infrastructure'
   inputs:
     azureSubscription: 'azure-connection'
-    scriptType: batch
+    scriptType: pscore
     scriptLocation: inlineScript
     inlineScript: |
-      echo "About to deploy Bicep template..."
-      echo az deployment group create ^
-        --resource-group $(resourceGroupName) ^
-        --template-file $(bicepFile) ^
-        --parameters "@$(paramFile)" ^
-        --parameters adminPassword=$(VM_ADMIN_PASSWORD)
+      az --version
       az group create --name $(resourceGroupName) --location $(location)
-      az deployment group create ^
-        --resource-group $(resourceGroupName) ^
-        --template-file $(bicepFile) ^
-        --parameters "@$(paramFile)" ^
-        --parameters adminPassword=$(VM_ADMIN_PASSWORD)
-      echo "Deployment exit code: %ERRORLEVEL%"
-  env:
-    VM_ADMIN_PASSWORD: $(VM_ADMIN_PASSWORD)
-
-- task: AzureCLI@2
-  displayName: 'Show last deployment status'
-  inputs:
-    azureSubscription: 'azure-connection'
-    scriptType: batch
-    scriptLocation: inlineScript
-    inlineScript: |
-      az deployment group show ^
-        --resource-group $(resourceGroupName) ^
-        --name main
+      az deployment group create `
+        --resource-group $(resourceGroupName) `
+        --template-file $(bicepFile) `
+        --parameters "@$(paramFile)" `
+        --parameters "adminPassword=$(VM_ADMIN_PASSWORD)" `
+        --parameters "adminUsername=azureuser" `
+        --parameters "location=$(location)"
+    workingDirectory: $(Build.SourcesDirectory)

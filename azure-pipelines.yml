@@ -2,16 +2,16 @@ trigger:
 - none
 
 variables:
-  resourceGroupName: 'juict-$(Build.BuildId)'
+  resourceGroupName: 'winvm-$(Build.BuildId)'
   location: 'westeurope'
   templateFile: './main.bicep'
   adminUN: 'azureuser'
-  # adminPASS set as secret variable
+  # Set VM_ADMIN_PASSWORD as secret pipeline variable
 
 stages:
-## Stage 1: Build & Package
+## Stage 1: Build & Validate
 - stage: Build
-  displayName: 'Build & Package'
+  displayName: 'Build & Validate'
   jobs:
   - job: BicepBuild
     pool:
@@ -20,73 +20,79 @@ stages:
     - checkout: self
     
     - task: AzureCLI@2
-      displayName: 'Bicep Build & Validate'
+      displayName: 'Compile Bicep'
       inputs:
         azureSubscription: 'azure-connection'
         scriptType: bash
+        scriptLocation: inlineScript
         inlineScript: |
+          az bicep install
           az bicep build --file $(templateFile)
+        workingDirectory: $(Build.SourcesDirectory)
+
+    - task: AzureCLI@2
+      displayName: 'Validate Template'
+      inputs:
+        azureSubscription: 'azure-connection'
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
           az deployment group validate \
             --resource-group $(resourceGroupName) \
             --template-file $(templateFile) \
-            --parameters adminUsername="$(adminUN)" adminPassword="$(adminPASS)"
-    
-    - task: PublishPipelineArtifact@1
-      displayName: 'Publish Bicep Package'
-      inputs:
-        targetPath: '$(Build.SourcesDirectory)'
-        artifact: 'bicep-package'
+            --parameters adminUsername="$(adminUN)" \
+            --parameters adminPassword="$(VM_ADMIN_PASSWORD)"
+        workingDirectory: $(Build.SourcesDirectory)
 
-## Stage 2: Test & Validation
+## Stage 2: Test Deployment
 - stage: Test
-  displayName: 'Test & Validation'
+  displayName: 'Test Deployment'
   dependsOn: Build
   jobs:
-  - job: DeploymentTests
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - task: DownloadPipelineArtifact@2
-      displayName: 'Download Artifacts'
-      inputs:
-        artifact: 'bicep-package'
-        path: '$(Pipeline.Workspace)'
-    
-    - task: AzureResourceManagerTemplateDeployment@3
-      displayName: 'ARM Template Validation'
-      inputs:
-        deploymentScope: 'Resource Group'
-        azureResourceManagerConnection: 'azure-connection'
-        subscriptionId: '$(ARM_SUBSCRIPTION_ID)'
-        action: 'Create Or Update Resource Group'
-        resourceGroupName: '$(resourceGroupName)-test'
-        location: '$(location)'
-        templateLocation: 'Linked artifact'
-        csmFile: '$(Pipeline.Workspace)/bicep-package/main.json'
-        deploymentMode: 'Validation'
-
-## Stage 3: Deployment
-- stage: Deploy
-  displayName: 'Production Deployment'
-  dependsOn: Test
-  jobs:
-  - job: DeployVM
+  - job: DeployTest
     pool:
       vmImage: 'ubuntu-latest'
     steps:
     - task: AzureCLI@2
-      displayName: 'Deploy Windows VM'
+      displayName: 'Deploy to Test'
       inputs:
         azureSubscription: 'azure-connection'
         scriptType: bash
+        scriptLocation: inlineScript
         inlineScript: |
-          az group create --name $(resourceGroupName) --location $(location)
+          az group create --name $(resourceGroupName)-test --location $(location)
           az deployment group create \
-            --resource-group $(resourceGroupName) \
+            --resource-group $(resourceGroupName)-test \
             --template-file $(templateFile) \
-            --parameters adminUsername="$(adminUN)" adminPassword="$(adminPASS)"
+            --parameters adminUsername="$(adminUN)" \
+            --parameters adminPassword="$(VM_ADMIN_PASSWORD)"
+        workingDirectory: $(Build.SourcesDirectory)
 
-## Optional Cleanup Stage
+## Stage 3: Production Deployment
+- stage: Deploy
+  displayName: 'Production Deployment'
+  dependsOn: Test
+  jobs:
+  - job: DeployProd
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Deploy to Production'
+      inputs:
+        azureSubscription: 'azure-connection'
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          az group create --name $(resourceGroupName)-prod --location $(location)
+          az deployment group create \
+            --resource-group $(resourceGroupName)-prod \
+            --template-file $(templateFile) \
+            --parameters adminUsername="$(adminUN)" \
+            --parameters adminPassword="$(VM_ADMIN_PASSWORD)"
+        workingDirectory: $(Build.SourcesDirectory)
+
+## Stage 4: Cleanup
 - stage: Cleanup
   displayName: 'Resource Cleanup'
   dependsOn: Deploy
@@ -96,12 +102,14 @@ stages:
       eq(variables['Build.Reason'], 'PullRequest')
     )
   jobs:
-  - job: DeleteResources
+  - job: CleanupResources
     steps:
     - task: AzureCLI@2
       displayName: 'Remove Test Resources'
       inputs:
         azureSubscription: 'azure-connection'
         scriptType: bash
+        scriptLocation: inlineScript
         inlineScript: |
-          az group delete --name $(resourceGroupName) --yes --no-wait
+          az group delete --name $(resourceGroupName)-test --yes --no-wait
+          az group delete --name $(resourceGroupName)-prod --yes --no-wait

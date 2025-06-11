@@ -3,11 +3,12 @@ param adminUsername string = 'azureuser'
 @secure()
 param adminPassword string
 
-var vmName = 'testvm'
-var vnetName = 'testvnet'
-var subnetName = 'testsubnet'
-var ipName = 'testip'
-var nicName = 'testnic'
+var vmName = 'winvm'
+var vnetName = 'win-vnet'
+var subnetName = 'win-subnet'
+var ipName = 'win-ip'
+var nicName = 'win-nic'
+var nsgName = 'win-nsg'
 
 resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' = {
   name: vnetName
@@ -23,6 +24,31 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' = {
         name: subnetName
         properties: {
           addressPrefix: '10.0.0.0/24'
+          networkSecurityGroup: {
+            id: nsg.id
+          }
+        }
+      }
+    ]
+  }
+}
+
+resource nsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
+  name: nsgName
+  location: location
+  properties: {
+    securityRules: [
+      {
+        name: 'Allow-RDP'
+        properties: {
+          priority: 1000
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '3389'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
         }
       }
     ]
@@ -69,15 +95,12 @@ resource vm 'Microsoft.Compute/virtualMachines@2023-03-01' = {
       computerName: vmName
       adminUsername: adminUsername
       adminPassword: adminPassword
-      linuxConfiguration: {
-        disablePasswordAuthentication: false
-      }
     }
     storageProfile: {
       imageReference: {
-        publisher: 'Canonical'
-        offer: 'UbuntuServer'
-        sku: '18_04-lts-gen2'
+        publisher: 'MicrosoftWindowsDesktop'
+        offer: 'Windows-11'
+        sku: 'win11-21h2-pro'
         version: 'latest'
       }
       osDisk: {

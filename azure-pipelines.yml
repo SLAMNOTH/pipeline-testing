@@ -1,60 +1,29 @@
-trigger: none  # Manual runs only
+trigger: none
 
 variables:
   resourceGroupName: 'saxion-test-rg'
   location: 'WestEurope'
   bicepFile: './infra/main.bicep'
   paramFile: './infra/main.parameters.json'
-  vmName: 'winvm'
 
 pool:
-  name: Default  # Self-hosted agent
+  name: Default
 
-stages:
-- stage: Deploy
-  displayName: Deploy Windows VM
-  jobs:
-  - job: DeployJob
-    steps:
-    - checkout: self
-    
-    - task: AzureCLI@2
-      displayName: 'Validate and Deploy'
-      inputs:
-        azureSubscription: 'azure-connection'
-        scriptType: batch  # Critical for Windows agents
-        scriptLocation: inlineScript
-        inlineScript: |
-          az group create --name $(resourceGroupName) --location $(location)
-          az deployment group validate ^
-            --resource-group $(resourceGroupName) ^
-            --template-file $(bicepFile) ^
-            --parameters @$(paramFile) ^
-            --parameters adminPassword=$(VM_ADMIN_PASSWORD)
-          
-          az deployment group create ^
-            --resource-group $(resourceGroupName) ^
-            --template-file $(bicepFile) ^
-            --parameters @$(paramFile) ^
-            --parameters adminPassword=$(VM_ADMIN_PASSWORD)
-        workingDirectory: $(Build.SourcesDirectory)
-      env:
-        VM_ADMIN_PASSWORD: $(VM_ADMIN_PASSWORD)  # Secret variable reference
+steps:
+- checkout: self
 
-- stage: Output
-  displayName: Get RDP Details
-  dependsOn: Deploy
-  jobs:
-  - job: OutputJob
-    steps:
-    - task: AzureCLI@2
-      displayName: 'Show Public IP'
-      inputs:
-        azureSubscription: 'azure-connection'
-        scriptType: batch
-        scriptLocation: inlineScript
-        inlineScript: |
-          az vm list-ip-addresses ^
-            --resource-group $(resourceGroupName) ^
-            --name $(vmName) ^
-            --output table
+- task: AzureCLI@2
+  displayName: 'Deploy Resources'
+  inputs:
+    azureSubscription: 'azure-connection'
+    scriptType: batch
+    scriptLocation: inlineScript
+    inlineScript: |
+      az group create --name $(resourceGroupName) --location $(location)
+      az deployment group create ^
+        --resource-group $(resourceGroupName) ^
+        --template-file $(bicepFile) ^
+        --parameters "@$(paramFile)" ^
+        --parameters adminPassword=$(VM_ADMIN_PASSWORD)
+  env:
+    VM_ADMIN_PASSWORD: $(VM_ADMIN_PASSWORD)

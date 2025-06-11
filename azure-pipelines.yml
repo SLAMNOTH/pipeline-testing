@@ -1,36 +1,30 @@
 trigger:
 - none
 
-pool:
-  vmImage: 'windows-latest'
-
 variables:
-  vmName: 'myWinVM'
-  resourceGroup: 'winvm-rg'
-  location: 'West Europe'
+  resourceGroupName: 'winvm-rg'
+  location: 'westeurope'
+  templateFile: './main.bicep'
+  adminUN: 'azureuser' # Or use a pipeline variable
+  # adminPASS should be set as a secret pipeline variable
+
+pool:
+  vmImage: 'ubuntu-latest'
 
 steps:
 - checkout: self
 
 - task: AzureCLI@2
-  displayName: 'Install Bicep'
+  displayName: 'Deploy Windows VM with Bicep'
   inputs:
-    azureSubscription: 'azure-connection'
-    scriptType: 'ps'
-    scriptLocation: 'inlineScript'
+    azureSubscription: '<your-azure-service-connection>'
+    scriptType: bash
+    scriptLocation: inlineScript
+    useGlobalConfig: false
     inlineScript: |
-      az bicep install
-
-- task: AzureResourceManagerTemplateDeployment@3
-  displayName: 'Deploy Bicep Template'
-  inputs:
-    deploymentScope: 'Resource Group'
-    azureResourceManagerConnection: 'azure-connection'
-    subscriptionId: '$(subscriptionId)'
-    action: 'Create Or Update Resource Group'
-    resourceGroupName: '$(resourceGroup)'
-    location: '$(location)'
-    templateLocation: 'Linked artifact'
-    csmFile: 'vm-deploy.bicep'
-    csmParametersFile: 'vm-params.bicepparam'
-    deploymentMode: 'Incremental'
+      az --version
+      az group create --name $(resourceGroupName) --location $(location)
+      az deployment group create \
+        --resource-group $(resourceGroupName) \
+        --template-file $(templateFile) \
+        --parameters adminUsername="$(adminUN)" adminPassword="$(adminPASS)"

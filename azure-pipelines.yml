@@ -1,19 +1,32 @@
 trigger:
 - none
 
-pool: default  # Use your self-hosted agent pool name if it's different
+variables:
+  resourceGroupName: 'juict-test'
+  location: 'WestEurope'
+  bicepFile: './infra/main.bicep'
+  paramFile: './infra/main.parameters.json'
+
+pool:
+  name: Default
 
 steps:
+- checkout: self
+
 - task: AzureCLI@2
+  displayName: 'Deploy Bicep Infrastructure'
   inputs:
     azureSubscription: 'azure-connection'
-    scriptType: 'ps'
-    scriptLocation: 'inlineScript'
+    scriptType: pscore
+    scriptLocation: inlineScript
     inlineScript: |
-      Write-Host "Starting Bicep deployment..."
-      az deployment sub create `
-        --location westeurope `
-        --template-file ./main.bicep `
-        --parameters environment=dev location=westeurope
-      Write-Host "Bicep deployment finished"
-
+      az --version
+      az group create --name $(resourceGroupName) --location $(location)
+      az deployment group create `
+        --resource-group $(resourceGroupName) `
+        --template-file $(bicepFile) `
+        --parameters "@$(paramFile)" `
+        --parameters "adminPassword=$(VM_ADMIN_PASSWORD)" `
+        --parameters "adminUsername=azureuser" `
+        --parameters "location=$(location)"
+    workingDirectory: $(Build.SourcesDirectory)

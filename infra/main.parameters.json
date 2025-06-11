@@ -4,12 +4,6 @@
   "parameters": {
     "adminPassword": {
       "value": ""
-    },
-    "adminUsername": {
-      "value": "azureuser"
-    },
-    "location": {
-      "value": "westeurope"
     }
   }
 }

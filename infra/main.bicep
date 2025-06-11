@@ -3,11 +3,12 @@ param adminUsername string = 'azureuser'
 @secure()
 param adminPassword string
 
-var vmName = 'testvm'
-var vnetName = 'testvnet'
-var subnetName = 'testsubnet'
-var ipName = 'testip'
-var nicName = 'testnic'
+var vmName = 'winvm'
+var vnetName = 'winvnet'
+var subnetName = 'winsubnet'
+var ipName = 'winip'
+var nicName = 'winnic'
+var nsgName = 'win-nsg'
 
 resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' = {
   name: vnetName
@@ -23,6 +24,9 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' = {
         name: subnetName
         properties: {
           addressPrefix: '10.0.0.0/24'
+          networkSecurityGroup: {
+            id: nsg.id
+          }
         }
       }
     ]
@@ -34,6 +38,28 @@ resource publicIp 'Microsoft.Network/publicIPAddresses@2023-09-01' = {
   location: location
   properties: {
     publicIPAllocationMethod: 'Dynamic'
+  }
+}
+
+resource nsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
+  name: nsgName
+  location: location
+  properties: {
+    securityRules: [
+      {
+        name: 'Allow-RDP'
+        properties: {
+          priority: 1000
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '3389'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+        }
+      }
+    ]
   }
 }
 
@@ -63,21 +89,18 @@ resource vm 'Microsoft.Compute/virtualMachines@2023-03-01' = {
   location: location
   properties: {
     hardwareProfile: {
-      vmSize: 'Standard_B1ls'
+      vmSize: 'Standard_B1s' // Cheap Windows-compatible VM
     }
     osProfile: {
       computerName: vmName
       adminUsername: adminUsername
       adminPassword: adminPassword
-      linuxConfiguration: {
-        disablePasswordAuthentication: false
-      }
     }
     storageProfile: {
       imageReference: {
-        publisher: 'Canonical'
-        offer: 'UbuntuServer'
-        sku: '18_04-lts-gen2'
+        publisher: 'MicrosoftWindowsDesktop'
+        offer: 'Windows-11'
+        sku: 'win11-21h2-pro'
         version: 'latest'
       }
       osDisk: {

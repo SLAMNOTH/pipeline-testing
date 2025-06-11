@@ -20,15 +20,20 @@ stages:
     - checkout: self
     
     - task: AzureCLI@2
-      displayName: 'Compile Bicep'
+      displayName: 'Bicep Build & Validate'
       inputs:
         azureSubscription: 'azure-connection'
-        scriptType: bash
-        scriptLocation: inlineScript
+        scriptType: bash  # Required for Linux agents
+        scriptLocation: inlineScript  # Must be explicitly set
         inlineScript: |
           az bicep install
           az bicep build --file $(templateFile)
-        workingDirectory: $(Build.SourcesDirectory)
+          az deployment group validate \
+            --resource-group $(resourceGroupName) \
+            --template-file $(templateFile) \
+            --parameters adminUsername="$(adminUN)" \
+            --parameters adminPassword="$(VM_ADMIN_PASSWORD)"
+        workingDirectory: $(Build.SourcesDirectory)  # Explicit path
 
     - task: AzureCLI@2
       displayName: 'Validate Template'

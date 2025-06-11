@@ -39,7 +39,7 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
   properties: {
     securityRules: [
       {
-        name: 'Allow-RDP'
+        name: 'allow-rdp'
         properties: {
           priority: 1000
           direction: 'Inbound'
@@ -95,12 +95,15 @@ resource vm 'Microsoft.Compute/virtualMachines@2023-03-01' = {
       computerName: vmName
       adminUsername: adminUsername
       adminPassword: adminPassword
+      windowsConfiguration: {
+        enableAutomaticUpdates: true
+      }
     }
     storageProfile: {
       imageReference: {
-        publisher: 'MicrosoftWindowsDesktop'
-        offer: 'Windows-11'
-        sku: 'win11-21h2-pro'
+        publisher: 'MicrosoftWindowsServer'
+        offer: 'WindowsServer'
+        sku: '2022-Datacense'
         version: 'latest'
       }
       osDisk: {

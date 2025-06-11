@@ -1,10 +1,9 @@
 trigger:
-- none
+- main
 
 variables:
   location: 'WestEurope'
-  bicepFile: './infra/nat-gateway.bicep'
-  paramFile: './infra/nat-gateway.parameters.json'
+  bicepFile: './infra/windows-vm.bicep'
 
 pool:
   name: Default  # Your self-hosted Windows agent pool
@@ -12,51 +11,37 @@ pool:
 steps:
 - checkout: self
 
-- task: PowerShell@2
-  displayName: 'Verify Prerequisites'
-  inputs:
-    targetType: 'inline'
-    script: |
-      Write-Host "Checking Azure CLI version..."
-      az --version
-      Write-Host "Checking Bicep version..."
-      az bicep version
-      Write-Host "Installing/Updating Bicep..."
-      az bicep install
-    workingDirectory: $(Build.SourcesDirectory)
-
-
 - task: AzureCLI@2
-  displayName: 'Deploy NAT Gateway Infrastructure'
+  displayName: 'Deploy Windows VM Infrastructure'
   inputs:
     azureSubscription: 'azure-connection'
     scriptType: pscore
     scriptLocation: inlineScript
     inlineScript: |
-      Write-Host "Creating resource group if it doesn't exist..."
+      Write-Host "Azure CLI Version:"
+      az --version
+      
+      Write-Host "Creating resource group if needed..."
       az group create --name $(resourceGroupName) --location $(location)
       
-      Write-Host "Deploying NAT Gateway infrastructure..."
+      Write-Host "Deploying Windows VM infrastructure..."
+      $deploymentName = "windows-vm-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+      
       az deployment group create `
         --resource-group $(resourceGroupName) `
         --template-file $(bicepFile) `
-        --parameters "@$(paramFile)" `
+        --parameters "adminUsername=azureuser" `
+        --parameters "adminPassword=$(VM_ADMIN_PASSWORD)" `
         --parameters "location=$(location)" `
-        --name "nat-gateway-deployment-$(Build.BuildNumber)"
+        --name $deploymentName `
+        --verbose
       
       Write-Host "Deployment completed successfully!"
-    workingDirectory: $(Build.SourcesDirectory)
-
-- task: AzureCLI@2
-  displayName: 'Output Deployment Results'
-  inputs:
-    azureSubscription: 'azure-connection'
-    scriptType: pscore
-    scriptLocation: inlineScript
-    inlineScript: |
-      Write-Host "Retrieving deployment outputs..."
+      
+      Write-Host "Getting VM public IP..."
       az deployment group show `
         --resource-group $(resourceGroupName) `
-        --name "nat-gateway-deployment-$(Build.BuildNumber)" `
-        --query "properties.outputs"
+        --name $deploymentName `
+        --query "properties.outputs.publicIpAddress.value" `
+        --output tsv
     workingDirectory: $(Build.SourcesDirectory)

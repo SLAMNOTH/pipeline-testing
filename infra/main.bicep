@@ -1,43 +1,63 @@
-param location string = 'westeurope'
-param adminUsername string = 'azureuser'
+param adminUsername string
+@minLength(12)
 @secure()
 param adminPassword string
+param location string = resourceGroup().location
+param vmName string = 'win-vm'
+param vmSize string = 'Standard_D2s_v5'
+param OSVersion string = '2022-datacenter-azure-edition'
 
-var vmName = 'testvm'
-var vnetName = 'testvnet'
-var subnetName = 'testsubnet'
-var ipName = 'testip'
-var nicName = 'testnic'
+var nicName = '${vmName}-nic'
+var vnetName = '${vmName}-vnet'
+var subnetName = 'default'
+var publicIpName = '${vmName}-pip'
+var nsgName = '${vmName}-nsg'
 
-resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' = {
+resource vnet 'Microsoft.Network/virtualNetworks@2022-05-01' = {
   name: vnetName
   location: location
   properties: {
-    addressSpace: {
-      addressPrefixes: [
-        '10.0.0.0/16'
-      ]
-    }
+    addressSpace: { addressPrefixes: [ '10.0.0.0/16' ] }
     subnets: [
       {
         name: subnetName
-        properties: {
-          addressPrefix: '10.0.0.0/24'
-        }
+        properties: { addressPrefix: '10.0.0.0/24' }
       }
     ]
   }
 }
 
-resource publicIp 'Microsoft.Network/publicIPAddresses@2023-09-01' = {
-  name: ipName
+resource publicIp 'Microsoft.Network/publicIPAddresses@2022-05-01' = {
+  name: publicIpName
   location: location
   properties: {
     publicIPAllocationMethod: 'Dynamic'
   }
 }
 
-resource nic 'Microsoft.Network/networkInterfaces@2023-09-01' = {
+resource nsg 'Microsoft.Network/networkSecurityGroups@2022-05-01' = {
+  name: nsgName
+  location: location
+  properties: {
+    securityRules: [
+      {
+        name: 'allow-rdp'
+        properties: {
+          priority: 1000
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '3389'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+        }
+      }
+    ]
+  }
+}
+
+resource nic 'Microsoft.Network/networkInterfaces@2022-05-01' = {
   name: nicName
   location: location
   properties: {
@@ -45,53 +65,45 @@ resource nic 'Microsoft.Network/networkInterfaces@2023-09-01' = {
       {
         name: 'ipconfig1'
         properties: {
-          subnet: {
-            id: vnet.properties.subnets[0].id
-          }
+          subnet: { id: vnet.properties.subnets[0].id }
           privateIPAllocationMethod: 'Dynamic'
-          publicIPAddress: {
-            id: publicIp.id
-          }
+          publicIPAddress: { id: publicIp.id }
         }
       }
     ]
+    networkSecurityGroup: { id: nsg.id }
   }
 }
 
-resource vm 'Microsoft.Compute/virtualMachines@2023-03-01' = {
+resource vm 'Microsoft.Compute/virtualMachines@2022-03-01' = {
   name: vmName
   location: location
   properties: {
-    hardwareProfile: {
-      vmSize: 'Standard_B1ls'
-    }
+    hardwareProfile: { vmSize: vmSize }
     osProfile: {
       computerName: vmName
       adminUsername: adminUsername
       adminPassword: adminPassword
-      linuxConfiguration: {
-        disablePasswordAuthentication: false
+      windowsConfiguration: {
+        enableAutomaticUpdates: true
+        provisionVMAgent: true
       }
     }
     storageProfile: {
       imageReference: {
-        publisher: 'Canonical'
-        offer: 'UbuntuServer'
-        sku: '18_04-lts-gen2'
+        publisher: 'MicrosoftWindowsServer'
+        offer: 'WindowsServer'
+        sku: OSVersion
         version: 'latest'
       }
       osDisk: {
         createOption: 'FromImage'
-        managedDisk: {
-          storageAccountType: 'Standard_LRS'
-        }
+        managedDisk: { storageAccountType: 'Standard_LRS' }
       }
     }
     networkProfile: {
       networkInterfaces: [
-        {
-          id: nic.id
-        }
+        { id: nic.id }
       ]
     }
   }

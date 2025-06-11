@@ -1,14 +1,18 @@
 trigger:
 - main
 
-pool: default  # This targets your self-hosted agent
+pool: default  # Use your self-hosted agent pool name if it's different
 
 steps:
 - task: AzureCLI@2
   inputs:
-    azureSubscription: 'azure-connection'  # Must match your service connection name
-    scriptType: 'ps'
+    azureSubscription: 'azure-connection'  # This must match your service connection name
+    scriptType: 'ps'  # Use 'bash' if your agent is Linux
     scriptLocation: 'inlineScript'
     inlineScript: |
-      az --version
-      az group create --name test-rg --location westeurope
+      echo "📦 Starting Bicep deployment..."
+      az deployment sub create \
+        --location westeurope \
+        --template-file ./main.bicep \
+        --parameters environment=dev location=westeurope
+      echo "✅ Bicep deployment finished"

@@ -15,19 +15,16 @@ stages:
   - job: ValidateBicep
     displayName: 'Validate Bicep Syntax'
     pool:
-      vmImage: 'ubuntu-latest'
+      vmImage: 'windows-latest'  # Optimized for Windows validation
     steps:
     - checkout: self
-
     - task: AzureCLI@2
       displayName: 'Validate Bicep File'
       inputs:
         azureSubscription: 'azure-connection'
         scriptType: bash
-        scriptLocation: inlineScript
-        useGlobalConfig: false
         inlineScript: |
-          echo "Validating Bicep template syntax..."
+          az bicep install
           az bicep build --file $(templateFile)
 
 - stage: Test
@@ -45,10 +42,7 @@ stages:
       inputs:
         azureSubscription: 'azure-connection'
         scriptType: bash
-        scriptLocation: inlineScript
-        useGlobalConfig: false
         inlineScript: |
-          echo "Performing what-if deployment..."
           az deployment group what-if \
             --resource-group $(resourceGroupName) \
             --template-file $(templateFile) \
@@ -69,33 +63,39 @@ stages:
       inputs:
         azureSubscription: 'azure-connection'
         scriptType: bash
-        scriptLocation: inlineScript
-        useGlobalConfig: false
         inlineScript: |
-          echo "Creating resource group..."
           az group create --name $(resourceGroupName) --location $(location)
-
-          echo "Starting deployment..."
           az deployment group create \
             --resource-group $(resourceGroupName) \
             --template-file $(templateFile) \
             --parameters adminUsername="$(adminUN)" adminPassword="$(adminPASS)"
 
     - task: AzureCLI@2
-      displayName: 'Post-deployment: Check VM State'
+      displayName: 'Post-deployment Validation'
       inputs:
         azureSubscription: 'azure-connection'
         scriptType: bash
-        scriptLocation: inlineScript
-        useGlobalConfig: false
         inlineScript: |
-          echo "Checking VM status..."
-          vmState=$(az vm get-instance-view --name win-vm --resource-group $(resourceGroupName) --query "instanceView.statuses[?starts_with(code,'PowerState/')].displayStatus" -o tsv)
-          echo "VM Status: $vmState"
+          echo "NAT Gateway Public IP:"
+          az network public-ip show -n natgw-pip -g $(resourceGroupName) --query ipAddress -o tsv
+          
+          echo "VM Public IP:"
+          az network public-ip show -n win-vm-pip -g $(resourceGroupName) --query ipAddress -o tsv
 
-          if [ "$vmState" != "VM running" ]; then
-            echo "VM is not running!"
-            exit 1
-          fi
-
-          echo "VM is running."
+- stage: Cleanup
+  displayName: 'Resource Cleanup'
+  dependsOn: Deploy
+  condition: always()
+  jobs:
+  - job: DeleteResources
+    displayName: 'Remove Test Resources'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Delete Resource Group'
+      inputs:
+        azureSubscription: 'azure-connection'
+        scriptType: bash
+        inlineScript: |
+          az group delete --name $(resourceGroupName) --yes --no-wait

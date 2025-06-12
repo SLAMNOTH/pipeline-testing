@@ -10,50 +10,63 @@ param OSVersion string = '2022-datacenter-azure-edition'
 var nicName = '${vmName}-nic'
 var vnetName = '${vmName}-vnet'
 var subnetName = 'default'
-var publicIpName = '${vmName}-pip'
 var nsgName = '${vmName}-nsg'
+var natGatewayName = '${vmName}-nat-gateway'
+var natGatewayPublicIpName = '${natGatewayName}-pip'
 
-// NAT Gateway Resources
-resource natPublicIp 'Microsoft.Network/publicIPAddresses@2022-05-01' = {
-  name: 'natgw-pip'
+// A Standard SKU Public IP is required for the NAT Gateway
+resource natGatewayPublicIp 'Microsoft.Network/publicIPAddresses@2022-05-01' = {
+  name: natGatewayPublicIpName
   location: location
-  sku: { name: 'Standard' }
-  properties: { publicIPAllocationMethod: 'Static' }
+  sku: {
+    name: 'Standard'
+  }
+  properties: {
+    publicIPAllocationMethod: 'Static'
+  }
 }
 
+// NAT Gateway resource
 resource natGateway 'Microsoft.Network/natGateways@2022-05-01' = {
-  name: 'nat-gateway'
+  name: natGatewayName
   location: location
-  sku: { name: 'Standard' }
+  sku: {
+    name: 'Standard'
+  }
   properties: {
     idleTimeoutInMinutes: 4
-    publicIpAddresses: [{ id: natPublicIp.id }]
+    publicIpAddresses: [
+      {
+        id: natGatewayPublicIp.id
+      }
+    ]
   }
+  dependsOn: [
+    natGatewayPublicIp
+  ]
 }
 
 resource vnet 'Microsoft.Network/virtualNetworks@2022-05-01' = {
   name: vnetName
   location: location
   properties: {
-    addressSpace: { addressPrefixes: ['10.0.0.0/16'] }
+    addressSpace: {
+      addressPrefixes: [
+        '10.0.0.0/16'
+      ]
+    }
     subnets: [
       {
         name: subnetName
-        properties: { 
+        properties: {
           addressPrefix: '10.0.0.0/24'
-          natGateway: { id: natGateway.id }
+          // Associate the subnet with the NAT Gateway
+          natGateway: {
+            id: natGateway.id
+          }
         }
       }
     ]
-  }
-}
-
-resource publicIp 'Microsoft.Network/publicIPAddresses@2022-05-01' = {
-  name: publicIpName
-  location: location
-  sku: { name: 'Standard' }
-  properties: {
-    publicIPAllocationMethod: 'Static'
   }
 }
 
@@ -87,13 +100,17 @@ resource nic 'Microsoft.Network/networkInterfaces@2022-05-01' = {
       {
         name: 'ipconfig1'
         properties: {
-          subnet: { id: vnet.properties.subnets[0].id }
+          subnet: {
+            id: vnet.properties.subnets[0].id
+          }
           privateIPAllocationMethod: 'Dynamic'
-          publicIPAddress: { id: publicIp.id }
+          // Public IP is removed to ensure outbound traffic uses the NAT Gateway
         }
       }
     ]
-    networkSecurityGroup: { id: nsg.id }
+    networkSecurityGroup: {
+      id: nsg.id
+    }
   }
 }
 
@@ -101,7 +118,9 @@ resource vm 'Microsoft.Compute/virtualMachines@2022-03-01' = {
   name: vmName
   location: location
   properties: {
-    hardwareProfile: { vmSize: vmSize }
+    hardwareProfile: {
+      vmSize: vmSize
+    }
     osProfile: {
       computerName: vmName
       adminUsername: adminUsername
@@ -120,13 +139,18 @@ resource vm 'Microsoft.Compute/virtualMachines@2022-03-01' = {
       }
       osDisk: {
         createOption: 'FromImage'
-        managedDisk: { storageAccountType: 'Standard_LRS' }
+        managedDisk: {
+          storageAccountType: 'Standard_LRS'
+        }
       }
     }
     networkProfile: {
       networkInterfaces: [
-        { id: nic.id }
+        {
+          id: nic.id
+        }
       ]
     }
   }
 }
+

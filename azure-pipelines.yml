@@ -2,10 +2,13 @@ trigger:
 - none
 
 variables:
-  resourceGroupName: 'JUICT-TESTING'
+  resourceGroupName: 'winvm-rg'
   location: 'westeurope'
   templateFile: './main.bicep'
   adminUN: 'azureuser'
+  vnetName: 'my-existing-vnet'      # <-- Replace with your actual VNet name
+  subnetName: 'default'             # <-- Replace with your actual Subnet name
+
 
 stages:
 

@@ -13,17 +13,14 @@ var subnetName = 'default'
 var publicIpName = '${vmName}-pip'
 var nsgName = '${vmName}-nsg'
 
-resource publicIp 'Microsoft.Network/publicIPAddresses@2022-05-01' = {
-  name: publicIpName
+// NAT Gateway Resources
+resource natPublicIp 'Microsoft.Network/publicIPAddresses@2022-05-01' = {
+  name: 'natgw-pip'
   location: location
-  sku: { name: 'Standard' } // ← REQUIRED CHANGE
-  properties: {
-    publicIPAllocationMethod: 'Static' // ← MUST CHANGE FROM DYNAMIC
-  }
+  sku: { name: 'Standard' }
+  properties: { publicIPAllocationMethod: 'Static' }
 }
 
-
-// NAT Gateway Resource
 resource natGateway 'Microsoft.Network/natGateways@2022-05-01' = {
   name: 'nat-gateway'
   location: location
@@ -33,7 +30,6 @@ resource natGateway 'Microsoft.Network/natGateways@2022-05-01' = {
     publicIpAddresses: [{ id: natPublicIp.id }]
   }
 }
-
 
 resource vnet 'Microsoft.Network/virtualNetworks@2022-05-01' = {
   name: vnetName
@@ -45,19 +41,19 @@ resource vnet 'Microsoft.Network/virtualNetworks@2022-05-01' = {
         name: subnetName
         properties: { 
           addressPrefix: '10.0.0.0/24'
-          natGateway: { id: natGateway.id } // Associate NAT gateway
+          natGateway: { id: natGateway.id }
         }
       }
     ]
   }
 }
 
-
 resource publicIp 'Microsoft.Network/publicIPAddresses@2022-05-01' = {
   name: publicIpName
   location: location
+  sku: { name: 'Standard' }
   properties: {
-    publicIPAllocationMethod: 'Dynamic'
+    publicIPAllocationMethod: 'Static'
   }
 }
 

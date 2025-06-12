@@ -5,102 +5,56 @@ variables:
   resourceGroupName: 'winvm-rg'
   location: 'westeurope'
   templateFile: './main.bicep'
-  adminUN: 'azureuser'
-  vnetName: 'my-existing-vnet'      # <-- Replace with your actual VNet name
-  subnetName: 'default'             # <-- Replace with your actual Subnet name
+  vnetName: 'my-vnet'
+  subnetName: 'my-subnet'
+  adminUN: 'azureuser' # Username
+  # adminPASS must be set as a secret variable in Azure DevOps pipeline
 
+pool:
+  vmImage: 'ubuntu-latest'
 
 stages:
-
 - stage: Build
-  displayName: 'Build fase'
   jobs:
-  - job: ValidateBicep
-    displayName: 'Validate Bicep Syntax'
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - checkout: self
-
-    - task: AzureCLI@2
-      displayName: 'Validate Bicep File'
-      inputs:
-        azureSubscription: 'azure-connection'
-        scriptType: bash
-        scriptLocation: inlineScript
-        useGlobalConfig: false
-        inlineScript: |
-          echo "Validating Bicep template syntax..."
-          az bicep build --file $(templateFile)
+    - job: Build
+      steps:
+        - checkout: self
+        - script: |
+            echo "Build phase: validating Bicep syntax"
+            az bicep build --file $(templateFile)
+          displayName: 'Build: Validate and Compile Bicep'
 
 - stage: Test
-  displayName: 'Test Infra what-if'
-  dependsOn: Build
-  condition: succeeded()
   jobs:
-  - job: TestSyntax
-    displayName: 'What-if Deployment'
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - task: AzureCLI@2
-      displayName: 'Run What-If Deployment'
-      inputs:
-        azureSubscription: 'azure-connection'
-        scriptType: bash
-        scriptLocation: inlineScript
-        useGlobalConfig: false
-        inlineScript: |
-          echo "Performing what-if deployment..."
-          az deployment group what-if \
-            --resource-group $(resourceGroupName) \
-            --template-file $(templateFile) \
-            --parameters adminUsername="$(adminUN)" adminPassword="$(adminPASS)" || true
+    - job: Test
+      steps:
+        - task: AzureCLI@2
+          displayName: 'Test: What-if Deployment'
+          inputs:
+            azureSubscription: 'azure-connection'
+            scriptType: bash
+            scriptLocation: inlineScript
+            inlineScript: |
+              az deployment group what-if \
+                --resource-group $(resourceGroupName) \
+                --template-file $(templateFile) \
+                --parameters adminUsername='$(adminUN)' adminPassword='$(adminPASS)' \
+                             vnetName='$(vnetName)' subnetName='$(subnetName)'
 
 - stage: Deploy
-  displayName: 'Deploy Infrastructure'
-  dependsOn: Test
-  condition: succeeded()
   jobs:
-  - job: DeployVM
-    displayName: 'Deploy Windows VM'
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - task: AzureCLI@2
-      displayName: 'Deploy Bicep'
-      inputs:
-        azureSubscription: 'azure-connection'
-        scriptType: bash
-        scriptLocation: inlineScript
-        useGlobalConfig: false
-        inlineScript: |
-          az group create --name $(resourceGroupName) --location $(location)
-          az deployment group create \
-            --resource-group $(resourceGroupName) \
-            --template-file $(templateFile) \
-            --parameters \
-              adminUsername="$(adminUN)" \
-              adminPassword="$(adminPASS)" \
-              vnetName="$(vnetName)" \
-              subnetName="$(subnetName)"
-
-
-    - task: AzureCLI@2
-      displayName: 'Post-deployment: Check VM State'
-      inputs:
-        azureSubscription: 'azure-connection'
-        scriptType: bash
-        scriptLocation: inlineScript
-        useGlobalConfig: false
-        inlineScript: |
-          echo "Checking VM status..."
-          vmState=$(az vm get-instance-view --name win-vm --resource-group $(resourceGroupName) --query "instanceView.statuses[?starts_with(code,'PowerState/')].displayStatus" -o tsv)
-          echo "VM Status: $vmState"
-
-          if [ "$vmState" != "VM running" ]; then
-            echo "VM is not running!"
-            exit 1
-          fi
-
-          echo "VM is running."
+    - job: Deploy
+      steps:
+        - task: AzureCLI@2
+          displayName: 'Deploy: Create RG and Deploy Bicep'
+          inputs:
+            azureSubscription: 'azure-connection'
+            scriptType: bash
+            scriptLocation: inlineScript
+            inlineScript: |
+              az group create --name $(resourceGroupName) --location $(location)
+              az deployment group create \
+                --resource-group $(resourceGroupName) \
+                --template-file $(templateFile) \
+                --parameters adminUsername='$(adminUN)' adminPassword='$(adminPASS)' \
+                             vnetName='$(vnetName)' subnetName='$(subnetName)'

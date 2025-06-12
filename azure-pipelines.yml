@@ -4,57 +4,34 @@ trigger:
 variables:
   resourceGroupName: 'winvm-rg'
   location: 'westeurope'
-  templateFile: './main.bicep'
-  vnetName: 'my-vnet'
-  subnetName: 'my-subnet'
-  adminUN: 'azureuser' # Username
-  # adminPASS must be set as a secret variable in Azure DevOps pipeline
-
-pool:
-  vmImage: 'ubuntu-latest'
+  templateFile: 'main.bicep'
+  adminUN: 'azureuser'
+  adminPASS: '$(adminPassword)' # define this as a secret in your pipeline library
+  vnetName: 'my-existing-vnet'
+  subnetName: 'default'
 
 stages:
-- stage: Build
-  jobs:
-    - job: Build
-      steps:
-        - checkout: self
-        - script: |
-            echo "Build phase: validating Bicep syntax"
-            az bicep build --file $(templateFile)
-          displayName: 'Build: Validate and Compile Bicep'
-
-- stage: Test
-  jobs:
-    - job: Test
-      steps:
-        - task: AzureCLI@2
-          displayName: 'Test: What-if Deployment'
-          inputs:
-            azureSubscription: 'azure-connection'
-            scriptType: bash
-            scriptLocation: inlineScript
-            inlineScript: |
-              az deployment group what-if \
-                --resource-group $(resourceGroupName) \
-                --template-file $(templateFile) \
-                --parameters adminUsername='$(adminUN)' adminPassword='$(adminPASS)' \
-                             vnetName='$(vnetName)' subnetName='$(subnetName)'
-
 - stage: Deploy
+  displayName: Deploy Infrastructure
   jobs:
-    - job: Deploy
-      steps:
-        - task: AzureCLI@2
-          displayName: 'Deploy: Create RG and Deploy Bicep'
-          inputs:
-            azureSubscription: 'azure-connection'
-            scriptType: bash
-            scriptLocation: inlineScript
-            inlineScript: |
-              az group create --name $(resourceGroupName) --location $(location)
-              az deployment group create \
-                --resource-group $(resourceGroupName) \
-                --template-file $(templateFile) \
-                --parameters adminUsername='$(adminUN)' adminPassword='$(adminPASS)' \
-                             vnetName='$(vnetName)' subnetName='$(subnetName)'
+  - job: DeployInfra
+    displayName: Deploy with Bicep
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: 'azure-connection'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az account set --subscription $(AZURE_SUBSCRIPTION_ID)
+          az deployment group create \
+            --resource-group $(resourceGroupName) \
+            --template-file $(templateFile) \
+            --parameters natGatewayName='NatGateway01' \
+                         publicIpName='pip-natgw' \
+                         vnetName='$(vnetName)' \
+                         subnetName='$(subnetName)' \
+                         adminUsername='$(adminUN)' \
+                         adminPassword='$(adminPASS)'

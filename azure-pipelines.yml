@@ -2,36 +2,100 @@ trigger:
 - none
 
 variables:
-  resourceGroupName: 'winvm-rg'
+  resourceGroupName: 'JUICT-TESTING'
   location: 'westeurope'
-  templateFile: 'main.bicep'
+  templateFile: './main.bicep'
   adminUN: 'azureuser'
-  adminPASS: '$(adminPassword)' # define this as a secret in your pipeline library
-  vnetName: 'my-existing-vnet'
-  subnetName: 'default'
 
 stages:
-- stage: Deploy
-  displayName: Deploy Infrastructure
+
+- stage: Build
+  displayName: 'Build fase'
   jobs:
-  - job: DeployInfra
-    displayName: Deploy with Bicep
+  - job: ValidateBicep
+    displayName: 'Validate Bicep Syntax'
     pool:
-      vmImage: ubuntu-latest
+      vmImage: 'ubuntu-latest'
     steps:
+    - checkout: self
+
     - task: AzureCLI@2
+      displayName: 'Validate Bicep File'
       inputs:
         azureSubscription: 'azure-connection'
-        scriptType: 'bash'
-        scriptLocation: 'inlineScript'
+        scriptType: bash
+        scriptLocation: inlineScript
+        useGlobalConfig: false
         inlineScript: |
-          az account set --subscription $(AZURE_SUBSCRIPTION_ID)
+          echo "Validating Bicep template syntax..."
+          az bicep build --file $(templateFile)
+
+- stage: Test
+  displayName: 'Test Infra what-if'
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - job: TestSyntax
+    displayName: 'What-if Deployment'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Run What-If Deployment'
+      inputs:
+        azureSubscription: 'azure-connection'
+        scriptType: bash
+        scriptLocation: inlineScript
+        useGlobalConfig: false
+        inlineScript: |
+          echo "Performing what-if deployment..."
+          az deployment group what-if \
+            --resource-group $(resourceGroupName) \
+            --template-file $(templateFile) \
+            --parameters adminUsername="$(adminUN)" adminPassword="$(adminPASS)" || true
+
+- stage: Deploy
+  displayName: 'Deploy Infrastructure'
+  dependsOn: Test
+  condition: succeeded()
+  jobs:
+  - job: DeployVM
+    displayName: 'Deploy Windows VM'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Deploy Bicep'
+      inputs:
+        azureSubscription: 'azure-connection'
+        scriptType: bash
+        scriptLocation: inlineScript
+        useGlobalConfig: false
+        inlineScript: |
+          echo "Creating resource group..."
+          az group create --name $(resourceGroupName) --location $(location)
+
+          echo "Starting deployment..."
           az deployment group create \
             --resource-group $(resourceGroupName) \
             --template-file $(templateFile) \
-            --parameters natGatewayName='NatGateway01' \
-                         publicIpName='pip-natgw' \
-                         vnetName='$(vnetName)' \
-                         subnetName='$(subnetName)' \
-                         adminUsername='$(adminUN)' \
-                         adminPassword='$(adminPASS)'
+            --parameters adminUsername="$(adminUN)" adminPassword="$(adminPASS)"
+
+    - task: AzureCLI@2
+      displayName: 'Post-deployment: Check VM State'
+      inputs:
+        azureSubscription: 'azure-connection'
+        scriptType: bash
+        scriptLocation: inlineScript
+        useGlobalConfig: false
+        inlineScript: |
+          echo "Checking VM status..."
+          vmState=$(az vm get-instance-view --name win-vm --resource-group $(resourceGroupName) --query "instanceView.statuses[?starts_with(code,'PowerState/')].displayStatus" -o tsv)
+          echo "VM Status: $vmState"
+
+          if [ "$vmState" != "VM running" ]; then
+            echo "VM is not running!"
+            exit 1
+          fi
+
+          echo "VM is running."

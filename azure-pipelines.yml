@@ -75,14 +75,16 @@ stages:
         scriptLocation: inlineScript
         useGlobalConfig: false
         inlineScript: |
-          echo "Creating resource group..."
           az group create --name $(resourceGroupName) --location $(location)
-
-          echo "Starting deployment..."
           az deployment group create \
             --resource-group $(resourceGroupName) \
             --template-file $(templateFile) \
-            --parameters adminUsername="$(adminUN)" adminPassword="$(adminPASS)"
+            --parameters \
+              adminUsername="$(adminUN)" \
+              adminPassword="$(adminPASS)" \
+              vnetName="$(vnetName)" \
+              subnetName="$(subnetName)"
+
 
     - task: AzureCLI@2
       displayName: 'Post-deployment: Check VM State'

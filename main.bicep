@@ -56,20 +56,24 @@ resource natGateway 'Microsoft.Network/natGateways@2023-04-01' = {
   }
 }
 
-// Reference existing VNet
-resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' existing = {
+resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
   name: vnetName
-}
-
-// Update subnet to associate it with NAT Gateway
-resource subnet 'Microsoft.Network/virtualNetworks/subnets@2023-04-01' = {
-  parent: vnet
-  name: subnetName
+  location: location
   properties: {
-    addressPrefix: '10.0.0.0/24' // Replace as needed
-    natGateway: {
-      id: natGateway.id
+    addressSpace: {
+      addressPrefixes: [ '10.0.0.0/16' ]
     }
+    subnets: [
+      {
+        name: subnetName
+        properties: {
+          addressPrefix: '10.0.0.0/24'
+          natGateway: {
+            id: natGateway.id
+          }
+        }
+      }
+    ]
   }
 }
 

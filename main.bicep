@@ -13,13 +13,15 @@ var subnetName = 'default'
 var publicIpName = '${vmName}-pip'
 var nsgName = '${vmName}-nsg'
 
-// NAT Gateway Public IP (Standard SKU required)
-resource natPublicIp 'Microsoft.Network/publicIPAddresses@2022-05-01' = {
-  name: 'natgw-pip'
+resource publicIp 'Microsoft.Network/publicIPAddresses@2022-05-01' = {
+  name: publicIpName
   location: location
-  sku: { name: 'Standard' }
-  properties: { publicIPAllocationMethod: 'Static' }
+  sku: { name: 'Standard' } // ← REQUIRED CHANGE
+  properties: {
+    publicIPAllocationMethod: 'Static' // ← MUST CHANGE FROM DYNAMIC
+  }
 }
+
 
 // NAT Gateway Resource
 resource natGateway 'Microsoft.Network/natGateways@2022-05-01' = {

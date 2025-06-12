@@ -1,113 +1,109 @@
-@description('Name of the NAT Gateway')
-param natGatewayName string = 'NatGateway01'
-@description('Location for the resources')
-param location string = resourceGroup().location
-@description('Name of the public IP address')
-param publicIpName string = 'pip-natgw'
-@description('Name of the virtual network')
-param vnetName string
-@description('Name of the subnet to associate with the NAT Gateway')
-param subnetName string
-@description('Username for VM')
 param adminUsername string
+@minLength(12)
 @secure()
-@description('Password for VM')
 param adminPassword string
+param location string = resourceGroup().location
+param vmName string = 'win-vm'
+param vmSize string = 'Standard_D2s_v5'
+param OSVersion string = '2022-datacenter-azure-edition'
 
-// Create a Public IP for NAT Gateway
-resource publicIp 'Microsoft.Network/publicIPAddresses@2023-04-01' = {
-  name: publicIpName
-  location: location
-  sku: {
-    name: 'Standard'
-  }
-  properties: {
-    publicIPAllocationMethod: 'Static'
-  }
-}
+var nicName = '${vmName}-nic'
+var vnetName = '${vmName}-vnet'
+var subnetName = 'default'
+var publicIpName = '${vmName}-pip'
+var nsgName = '${vmName}-nsg'
 
-// Create the NAT Gateway
-resource natGateway 'Microsoft.Network/natGateways@2023-04-01' = {
-  name: natGatewayName
+resource vnet 'Microsoft.Network/virtualNetworks@2022-05-01' = {
+  name: vnetName
   location: location
-  sku: {
-    name: 'Standard'
-  }
   properties: {
-    publicIpAddresses: [
+    addressSpace: { addressPrefixes: [ '10.0.0.0/16' ] }
+    subnets: [
       {
-        id: publicIp.id
+        name: subnetName
+        properties: { addressPrefix: '10.0.0.0/24' }
       }
     ]
-    idleTimeoutInMinutes: 10
   }
 }
 
-// Reference existing VNet
-resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' existing = {
-  name: vnetName
-}
-
-// Update Subnet with NAT Gateway
-resource subnet 'Microsoft.Network/virtualNetworks/subnets@2023-04-01' = {
-  parent: vnet
-  name: subnetName
+resource publicIp 'Microsoft.Network/publicIPAddresses@2022-05-01' = {
+  name: publicIpName
+  location: location
   properties: {
-    addressPrefix: '10.0.0.0/24' // Adjust to match your VNet subnet if needed
-    natGateway: {
-      id: natGateway.id
-    }
+    publicIPAllocationMethod: 'Dynamic'
   }
 }
 
-// Create Network Interface for VM
-resource nic 'Microsoft.Network/networkInterfaces@2023-04-01' = {
-  name: 'vm-nic'
+resource nsg 'Microsoft.Network/networkSecurityGroups@2022-05-01' = {
+  name: nsgName
+  location: location
+  properties: {
+    securityRules: [
+      {
+        name: 'allow-rdp'
+        properties: {
+          priority: 1000
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '3389'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+        }
+      }
+    ]
+  }
+}
+
+resource nic 'Microsoft.Network/networkInterfaces@2022-05-01' = {
+  name: nicName
   location: location
   properties: {
     ipConfigurations: [
       {
         name: 'ipconfig1'
         properties: {
-          subnet: {
-            id: subnet.id
-          }
+          subnet: { id: vnet.properties.subnets[0].id }
           privateIPAllocationMethod: 'Dynamic'
+          publicIPAddress: { id: publicIp.id }
         }
       }
     ]
+    networkSecurityGroup: { id: nsg.id }
   }
 }
 
-// Create Windows VM
-resource winVM 'Microsoft.Compute/virtualMachines@2023-07-01' = {
-  name: 'winvm'
+resource vm 'Microsoft.Compute/virtualMachines@2022-03-01' = {
+  name: vmName
   location: location
   properties: {
-    hardwareProfile: {
-      vmSize: 'Standard_B2s'
-    }
+    hardwareProfile: { vmSize: vmSize }
     osProfile: {
-      computerName: 'winvm'
+      computerName: vmName
       adminUsername: adminUsername
       adminPassword: adminPassword
+      windowsConfiguration: {
+        enableAutomaticUpdates: true
+        provisionVMAgent: true
+      }
     }
     storageProfile: {
       imageReference: {
         publisher: 'MicrosoftWindowsServer'
         offer: 'WindowsServer'
-        sku: '2022-Datacenter'
+        sku: OSVersion
         version: 'latest'
       }
       osDisk: {
         createOption: 'FromImage'
+        managedDisk: { storageAccountType: 'Standard_LRS' }
       }
     }
     networkProfile: {
       networkInterfaces: [
-        {
-          id: nic.id
-        }
+        { id: nic.id }
       ]
     }
   }

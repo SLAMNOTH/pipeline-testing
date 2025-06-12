@@ -4,30 +4,29 @@ param natGatewayName string = 'NatGateway01'
 @description('Location for the resources')
 param location string = resourceGroup().location
 
-@description('Name of the public IP address for NAT Gateway')
+@description('Name of the public IP address')
 param publicIpName string = 'pip-natgw'
 
 @description('Name of the virtual network')
-param vnetName string
+param vnetName string = 'my-vnet'
 
 @description('Name of the subnet to associate with the NAT Gateway')
-param subnetName string
+param subnetName string = 'my-subnet'
 
-@description('Name of the VM')
-param vmName string = 'winvm-nat'
-
-@description('Size of the VM')
-param vmSize string = 'Standard_D2s_v3'
-
-@description('Admin username for the VM')
+@description('VM Admin Username')
 param adminUsername string
 
-@minLength(12)
+@description('VM Admin Password')
 @secure()
-@description('Admin password for the VM')
 param adminPassword string
 
-// Create a Public IP for NAT Gateway
+@description('Name of the VM')
+param vmName string = 'win-vm'
+
+@description('Size of the VM')
+param vmSize string = 'Standard_D2s_v5'
+
+// Public IP for NAT Gateway
 resource publicIp 'Microsoft.Network/publicIPAddresses@2023-04-01' = {
   name: publicIpName
   location: location
@@ -39,7 +38,7 @@ resource publicIp 'Microsoft.Network/publicIPAddresses@2023-04-01' = {
   }
 }
 
-// Create the NAT Gateway
+// NAT Gateway
 resource natGateway 'Microsoft.Network/natGateways@2023-04-01' = {
   name: natGatewayName
   location: location
@@ -47,15 +46,12 @@ resource natGateway 'Microsoft.Network/natGateways@2023-04-01' = {
     name: 'Standard'
   }
   properties: {
-    publicIpAddresses: [
-      {
-        id: publicIp.id
-      }
-    ]
+    publicIpAddresses: [ { id: publicIp.id } ]
     idleTimeoutInMinutes: 10
   }
 }
 
+// Virtual Network + Subnet
 resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
   name: vnetName
   location: location
@@ -77,29 +73,66 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
   }
 }
 
-// Network Interface for the VM
-var nicName = '${vmName}-nic'
+// Public IP for VM
+resource vmPublicIp 'Microsoft.Network/publicIPAddresses@2023-04-01' = {
+  name: '${vmName}-pip'
+  location: location
+  sku: {
+    name: 'Basic'
+  }
+  properties: {
+    publicIPAllocationMethod: 'Dynamic'
+  }
+}
 
-resource nic 'Microsoft.Network/networkInterfaces@2023-04-01' = {
-  name: nicName
+// Network Security Group
+resource nsg 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
+  name: '${vmName}-nsg'
   location: location
   properties: {
-    ipConfigurations: [
+    securityRules: [
       {
-        name: 'ipconfig1'
+        name: 'allow-rdp'
         properties: {
-          subnet: {
-            id: subnet.id
-          }
-          privateIPAllocationMethod: 'Dynamic'
+          priority: 1000
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '3389'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
         }
       }
     ]
   }
 }
 
+// NIC
+resource nic 'Microsoft.Network/networkInterfaces@2023-04-01' = {
+  name: '${vmName}-nic'
+  location: location
+  properties: {
+    ipConfigurations: [
+      {
+        name: 'ipconfig1'
+        properties: {
+          privateIPAllocationMethod: 'Dynamic'
+          publicIPAddress: { id: vmPublicIp.id }
+          subnet: {
+            id: resourceId('Microsoft.Network/virtualNetworks/subnets', vnetName, subnetName)
+          }
+        }
+      }
+    ]
+    networkSecurityGroup: {
+      id: nsg.id
+    }
+  }
+}
+
 // Windows VM
-resource vm 'Microsoft.Compute/virtualMachines@2023-07-01' = {
+resource vm 'Microsoft.Compute/virtualMachines@2023-03-01' = {
   name: vmName
   location: location
   properties: {

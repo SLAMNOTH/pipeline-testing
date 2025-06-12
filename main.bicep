@@ -13,19 +13,43 @@ var subnetName = 'default'
 var publicIpName = '${vmName}-pip'
 var nsgName = '${vmName}-nsg'
 
+// NAT Gateway Public IP (Standard SKU required)
+resource natPublicIp 'Microsoft.Network/publicIPAddresses@2022-05-01' = {
+  name: 'natgw-pip'
+  location: location
+  sku: { name: 'Standard' }
+  properties: { publicIPAllocationMethod: 'Static' }
+}
+
+// NAT Gateway Resource
+resource natGateway 'Microsoft.Network/natGateways@2022-05-01' = {
+  name: 'nat-gateway'
+  location: location
+  sku: { name: 'Standard' }
+  properties: {
+    idleTimeoutInMinutes: 4
+    publicIpAddresses: [{ id: natPublicIp.id }]
+  }
+}
+
+
 resource vnet 'Microsoft.Network/virtualNetworks@2022-05-01' = {
   name: vnetName
   location: location
   properties: {
-    addressSpace: { addressPrefixes: [ '10.0.0.0/16' ] }
+    addressSpace: { addressPrefixes: ['10.0.0.0/16'] }
     subnets: [
       {
         name: subnetName
-        properties: { addressPrefix: '10.0.0.0/24' }
+        properties: { 
+          addressPrefix: '10.0.0.0/24'
+          natGateway: { id: natGateway.id } // Associate NAT gateway
+        }
       }
     ]
   }
 }
+
 
 resource publicIp 'Microsoft.Network/publicIPAddresses@2022-05-01' = {
   name: publicIpName

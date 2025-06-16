@@ -1,4 +1,4 @@
-# Azure VM Deployment POC – JUICT
+# Azure VM Deployment POC
 
 ## Overzicht
 

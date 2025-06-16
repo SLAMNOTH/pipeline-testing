@@ -6,6 +6,8 @@ variables:
   location: 'westeurope'
   templateFile: './main.bicep'
   adminUN: 'azureuser'
+  # Hier staat de username van de VM die aangemaakt wordt in de pipeline,
+  # dit om te bewijzen dat Bicep daadwerkelijk variabelen gebruikt uit de pipeline
 
 stages:
 
@@ -53,6 +55,8 @@ stages:
             --resource-group $(resourceGroupName) \
             --template-file $(templateFile) \
             --parameters adminUsername="$(adminUN)" adminPassword="$(adminPASS)" || true
+            # Hier wordt het admin password opgeroepen. Deze staat in de variabelen van de pipline, gemarkeerd als secret.
+            # Note: In pipeline demo 2 wordt gebruik gemaakt een Azure Key Vault voor secrets.
 
 - stage: Deploy
   displayName: 'Deploy Infrastructure'

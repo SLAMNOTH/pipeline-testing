@@ -11,7 +11,7 @@ var nicName = '${vmName}-nic'
 var vnetName = '${vmName}-vnet'
 var subnetName = 'default'
 var publicIpName = '${vmName}-pip'
-var nsgName = '${vmName}-nsg'
+var nsgName = '${vmName}-nsg-juict'
 
 resource vnet 'Microsoft.Network/virtualNetworks@2022-05-01' = {
   name: vnetName
